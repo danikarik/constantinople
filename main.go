@@ -1,11 +1,15 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"math/rand"
 	"net/http"
 	"time"
 
+	"github.com/golang/glog"
+
+	"github.com/danikarik/constantinople/pkg/auth"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/mitchellh/go-server-timing"
@@ -35,7 +39,14 @@ func RequestsResponseTime() func(next http.Handler) http.Handler {
 	}
 }
 
+func init() {
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
+	flag.Parse()
+}
+
 func main() {
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Heartbeat("/ping"))
@@ -47,7 +58,7 @@ func main() {
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(middleware.Compress(5))
 	r.Use(cors.New(cors.Options{
-		Debug:          true,
+		Debug:          glog.V(3) == true,
 		AllowedOrigins: []string{"*"},
 		AllowedHeaders: []string{"Content-Type", "Cookie"},
 		AllowedMethods: []string{"GET", "POST", "DELETE"},
@@ -55,6 +66,16 @@ func main() {
 	r.Use(RequestsResponseTime())
 
 	r.Mount("/debug", middleware.Profiler())
+
+	auth, err := auth.New(auth.Options{
+		Hostname: "127.0.0.1:6379",
+		Password: "daniyar",
+	})
+	if err != nil {
+		glog.Exitf(err.Error())
+	}
+
+	r.Mount("/session", auth.Router())
 	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -71,9 +92,7 @@ func main() {
 		}
 	})
 
-	h := servertiming.Middleware(r, nil)
-
-	http.ListenAndServe(":3000", h)
+	http.ListenAndServe(":3000", servertiming.Middleware(r, nil))
 }
 
 func random(min, max int) time.Duration {

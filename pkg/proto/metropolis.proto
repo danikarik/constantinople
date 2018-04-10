@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+option java_package = "kz.carbase.metropolis";
+option java_outer_classname = "MetropolisProto";
+
+package metropolis;
+
+enum VerFlag {
+    AUTH = 0;
+    SIGNATURE = 1;
+}
+
+enum VerStatus {
+    SUCCESS = 0;
+    ERROR = 1;
+}
+
+message VerRequest {
+    string signedXml = 1;
+    VerFlag flag = 2;
+}
+
+message VerResponse {
+    VerStatus status = 1;
+    string message = 2;
+    string description = 3;
+}
+
+service MetropolisService {
+    rpc VerifySignature (VerRequest) returns (VerResponse) {}
+}
