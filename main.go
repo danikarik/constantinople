@@ -68,8 +68,9 @@ func main() {
 	r.Mount("/debug", middleware.Profiler())
 
 	auth, err := auth.New(auth.Options{
-		Hostname: "127.0.0.1:6379",
-		Password: "daniyar",
+		PKIAddress: "127.0.0.1:8000",
+		Hostname:   "127.0.0.1:6379",
+		Password:   "daniyar",
 	})
 	if err != nil {
 		glog.Exitf(err.Error())
