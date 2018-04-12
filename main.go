@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang/glog"
-
 	"github.com/danikarik/constantinople/pkg/auth"
+	"github.com/danikarik/constantinople/pkg/util"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"github.com/golang/glog"
 	"github.com/mitchellh/go-server-timing"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -49,6 +49,7 @@ func main() {
 
 	r := chi.NewRouter()
 
+	r.Use(middleware.RedirectSlashes)
 	r.Use(middleware.Heartbeat("/ping"))
 	r.Use(middleware.NoCache)
 	r.Use(middleware.RequestID)
@@ -65,18 +66,18 @@ func main() {
 	}).Handler)
 	r.Use(RequestsResponseTime())
 
-	r.Mount("/debug", middleware.Profiler())
-
 	auth, err := auth.New(auth.Options{
 		PKIAddress: "127.0.0.1:8000",
 		Hostname:   "127.0.0.1:6379",
 		Password:   "daniyar",
 	})
 	if err != nil {
-		glog.Exitf(err.Error())
+		util.Exit("[auth] %s", err.Error())
 	}
 
-	r.Mount("/session", auth.Router())
+	r.Mount(auth.Router("/auth"))
+
+	r.Mount("/debug", middleware.Profiler())
 	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {

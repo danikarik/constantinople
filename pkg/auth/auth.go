@@ -95,7 +95,6 @@ func New(options Options) (*Auth, error) {
 	}
 
 	perm = permissions.NewPermissions(userstate)
-	perm.Clear()
 
 	return &Auth{
 		addr:      options.PKIAddress,
@@ -105,19 +104,29 @@ func New(options Options) (*Auth, error) {
 }
 
 // Router groups all auth handlers.
-func (a *Auth) Router() http.Handler {
+func (a *Auth) Router(pattern string) (string, http.Handler) {
+
+	a.perm.Clear()
+	a.perm.SetPublicPath([]string{"/", pattern + "/login"})
+	a.perm.SetUserPath([]string{pattern + "/session", pattern + "/logout"})
+	a.perm.SetDenyFunction(denyHandler)
+
 	r := chi.NewRouter()
-	r.Get("/", a.sessionHandlerfunc)
-	r.Post("/", a.loginHandlerfunc)
-	r.Delete("/", a.logoutHandlerfunc)
-	return r
+
+	r.Use(a.Middleware())
+
+	r.Get("/session", a.sessionHandler)
+	r.Post("/login", a.loginHandler)
+	r.Delete("/logout", a.logoutHandler)
+
+	return pattern, r
 }
 
-func (a *Auth) sessionHandlerfunc(w http.ResponseWriter, r *http.Request) {
+func (a *Auth) sessionHandler(w http.ResponseWriter, r *http.Request) {
 	a.Session(w, r)
 }
 
-func (a *Auth) loginHandlerfunc(w http.ResponseWriter, r *http.Request) {
+func (a *Auth) loginHandler(w http.ResponseWriter, r *http.Request) {
 	data := &UserCred{}
 	if err := render.Bind(r, data); err != nil {
 		util.BadRequest(w, r, err)
@@ -126,17 +135,26 @@ func (a *Auth) loginHandlerfunc(w http.ResponseWriter, r *http.Request) {
 	a.Login(w, r, data)
 }
 
-func (a *Auth) logoutHandlerfunc(w http.ResponseWriter, r *http.Request) {
+func (a *Auth) logoutHandler(w http.ResponseWriter, r *http.Request) {
 	a.Logout(w, r)
 }
 
+func denyHandler(w http.ResponseWriter, r *http.Request) {
+	util.ErrorStatus(w, r, errors.New("permission denied"), http.StatusForbidden)
+}
+
 // Middleware checks session authentication.
-// func Middleware() func(next http.Handler) http.Handler {
-// 	return func(next http.Handler) http.Handler {
-// 		fn := func(w http.ResponseWriter, r *http.Request) {
-// 			// ...
-// 			next.ServeHTTP(w, r)
-// 		}
-// 		return http.HandlerFunc(fn)
-// 	}
-// }
+func (a *Auth) Middleware() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check if the user has the right admin/user rights
+			if a.perm.Rejected(w, r) {
+				// Deny the request
+				a.perm.DenyFunction()(w, r)
+				return
+			}
+			// Serve the requested page
+			next.ServeHTTP(w, r)
+		})
+	}
+}
