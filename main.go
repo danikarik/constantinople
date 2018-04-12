@@ -31,7 +31,7 @@ func init() {
 	prometheus.MustRegister(httpRequestsResponseTime)
 }
 
-// RequestsResponseTime -
+// RequestsResponseTime observes response time per request.
 func RequestsResponseTime() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
