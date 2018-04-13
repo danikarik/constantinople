@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -56,13 +55,14 @@ func main() {
 
 	r := chi.NewRouter()
 
-	r.Use(middleware.RedirectSlashes)
 	r.Use(middleware.Heartbeat("/ping"))
 	r.Use(middleware.NoCache)
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(middleware.Compress(5))
 	r.Use(cors.New(cors.Options{
@@ -86,20 +86,6 @@ func main() {
 
 	r.Mount("/debug", middleware.Profiler())
 	r.Get("/metrics", promhttp.Handler().ServeHTTP)
-
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		timing := servertiming.FromContext(r.Context())
-
-		m := timing.NewMetric("sql").WithDesc("SQL query").Start()
-		time.Sleep(random(20, 50))
-		m.Stop()
-
-		w.WriteHeader(200)
-		_, err := w.Write([]byte("Done. Check your browser inspector timing details."))
-		if err != nil {
-			log.Printf("Can't write http response: %s", err)
-		}
-	})
 
 	srv := http.Server{Addr: ":3000", Handler: chi.ServerBaseContext(baseCtx, servertiming.Middleware(r, nil))}
 
