@@ -102,7 +102,7 @@ func New(options Options) (*Auth, error) {
 func (a *Auth) Router(pattern string) (string, http.Handler) {
 	a.perm.Clear()
 	a.perm.SetPublicPath([]string{"/", pattern + "/login"})
-	a.perm.SetUserPath([]string{pattern + "/session", pattern + "/logout"})
+	a.perm.SetUserPath([]string{pattern + "/session", pattern + "/logout", "/cars"})
 	a.perm.SetDenyFunction(denyHandler)
 	r := chi.NewRouter()
 	r.Use(a.Middleware())

@@ -22,6 +22,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+const (
+	testCars = `{"status":"SUCCESS","result":[{"manufacturer":"Toyota","model":"RAV-4","number":"151AMM01","year":1992,"pasport_number":"AS011101010","color":"Серо-зеленый металлик","color_hex":"#4D5645","vin_code":"1GNSCAE03BR377068","engine_capacity":2000,"fines":[],"taxes":[],"deregistration":null,"reregistration":null},{"manufacturer":"BMW","model":"X7","number":"A151APM","year":1992,"pasport_number":"AS011101010","color":"Сливочный белый","color_hex":"#FDF4E3","vin_code":"1GNSCAE03BR377068","engine_capacity":2000,"fines":[{"amount":"25600 KZT","info":"Превышение скоростного режима","is_paid":false}],"taxes":[{"amount":"25600 KZT","info":"Превышение скоростного режима","is_paid":false}],"deregistration":null,"reregistration":null},{"manufacturer":"Lada","model":"Granta","number":"151BCM01","year":1992,"pasport_number":"AS011101010","color":"Серый коричневый","color_hex":"#403A3A","vin_code":"1GNSCAE03BR377068","engine_capacity":2000,"fines":[{"amount":"25600 KZT","info":"Превышение скоростного режима","is_paid":false}],"taxes":[],"deregistration":null,"reregistration":null},{"manufacturer":"Lada","model":"Granta","number":"151DDD01","year":1992,"pasport_number":"AS011101010","color":"Синий кобальт","color_hex":"#1E213D","vin_code":"1GNSCAE03BR377068","engine_capacity":2000,"fines":[],"taxes":[{"amount":"25600 KZT","info":"Превышение скоростного режима","is_paid":false}],"deregistration":null,"reregistration":null}]}`
+)
+
 var (
 	// ErrHTTPAddress raises when http server address is empty.
 	ErrHTTPAddress = errors.New("tcp: address not specified")
@@ -35,6 +39,8 @@ type Options struct {
 	AuthService string
 	RedisHost   string
 	RedisPass   string
+	Username    string
+	Password    string
 }
 
 // App stands for application container.
@@ -44,14 +50,7 @@ type App struct {
 }
 
 func setup(addr string, options Options) (*auth.Auth, *cors.Cors, error) {
-	var (
-		defaultOrigins = []string{"*"}
-		defaultDebug   = true
-	)
-	if !glog.V(3) {
-		defaultOrigins = options.Origins
-		defaultDebug = false
-	}
+	var debug = glog.V(3) == true
 	if addr == "" {
 		return nil, nil, ErrHTTPAddress
 	}
@@ -62,24 +61,24 @@ func setup(addr string, options Options) (*auth.Auth, *cors.Cors, error) {
 		PKIAddress: options.AuthService,
 		Hostname:   options.RedisHost,
 		Password:   options.RedisPass,
-		Debug:      defaultDebug,
+		Debug:      debug,
 	})
 	if err != nil {
 		return nil, nil, err
 	}
 	crs := cors.New(cors.Options{
-		AllowedOrigins:   defaultOrigins,
+		AllowedOrigins:   options.Origins,
 		AllowedMethods:   []string{"GET", "POST", "DELETE"},
 		AllowedHeaders:   []string{"Content-Type", "Cookie"},
 		AllowCredentials: true,
-		Debug:            defaultDebug,
+		Debug:            debug,
 	})
 	return auth, crs, nil
 }
 
 // New is a contructor for App container.
 func New(addr string, options Options) (*App, error) {
-	auth, crs, err := setup(addr, options)
+	ath, crs, err := setup(addr, options)
 	if err != nil {
 		return nil, err
 	}
@@ -94,9 +93,22 @@ func New(addr string, options Options) (*App, error) {
 	r.Use(middleware.Compress(5))
 	r.Use(crs.Handler)
 	r.Use(metric.RequestsResponseTime())
-	r.Mount(auth.Router("/auth"))
-	r.Mount("/debug", middleware.Profiler())
-	r.Get("/metrics", promhttp.Handler().ServeHTTP)
+	r.Route("/live", func(r chi.Router) {
+		r.Use(auth.BasicAuth(func(user, pass string) bool {
+			if user == options.Username && pass == options.Password {
+				return true
+			}
+			return false
+		}))
+		r.Mount("/debug", middleware.Profiler())
+		r.Get("/metrics", promhttp.Handler().ServeHTTP)
+	})
+	r.Mount(ath.Router("/auth"))
+	// DELETE IN FUTURE
+	r.With(ath.Middleware()).Get("/cars", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, err = w.Write([]byte(testCars))
+	})
 	return &App{
 		addr: addr,
 		mux:  r,
