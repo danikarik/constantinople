@@ -44,6 +44,8 @@ type Options struct {
 	Password string
 	// Validate is used to struct schema validation.
 	Validate *validator.Validate
+	// Debug mode.
+	Debug bool
 }
 
 // Auth is a container used for userstate.
@@ -51,32 +53,27 @@ type Auth struct {
 	userstate *permissions.UserState
 	perm      *permissions.Permissions
 	addr      string
+	debug     bool
 }
 
 // New creates a new Auth handler with the provided options.
 func New(options Options) (*Auth, error) {
-
-	if options.PKIAddress == "" {
-		return nil, ErrEmptyAddress
-	}
-
 	var (
 		err       error
 		userstate *permissions.UserState
-		perm      *permissions.Permissions
 		hostname  string
 	)
-
+	if options.PKIAddress == "" {
+		return nil, ErrEmptyAddress
+	}
 	if options.Validate == nil {
 		validate = validator.New()
 	}
-
 	if options.Hostname != "" {
 		hostname = options.Hostname
 	} else {
 		hostname = defaultHost
 	}
-
 	if options.Password != "" {
 		if userstate, err = permissions.NewUserStateWithPassword2(
 			hostname,
@@ -93,32 +90,25 @@ func New(options Options) (*Auth, error) {
 			return nil, ErrRedisConn
 		}
 	}
-
-	perm = permissions.NewPermissions(userstate)
-
 	return &Auth{
 		addr:      options.PKIAddress,
 		userstate: userstate,
-		perm:      perm,
+		perm:      permissions.NewPermissions(userstate),
+		debug:     options.Debug,
 	}, nil
 }
 
 // Router groups all auth handlers.
 func (a *Auth) Router(pattern string) (string, http.Handler) {
-
 	a.perm.Clear()
 	a.perm.SetPublicPath([]string{"/", pattern + "/login"})
 	a.perm.SetUserPath([]string{pattern + "/session", pattern + "/logout"})
 	a.perm.SetDenyFunction(denyHandler)
-
 	r := chi.NewRouter()
-
 	r.Use(a.Middleware())
-
 	r.Get("/session", a.sessionHandler)
 	r.Post("/login", a.loginHandler)
 	r.Delete("/logout", a.logoutHandler)
-
 	return pattern, r
 }
 
