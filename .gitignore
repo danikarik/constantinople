@@ -17,3 +17,4 @@
 debug
 
 .DS_Store
+vendor/
