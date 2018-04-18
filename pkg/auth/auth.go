@@ -7,6 +7,7 @@ import (
 	"github.com/danikarik/constantinople/pkg/util"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/render"
+	"github.com/xyproto/cookie"
 	permissions "github.com/xyproto/permissions2"
 	validator "gopkg.in/go-playground/validator.v9"
 )
@@ -100,15 +101,16 @@ func New(options Options) (*Auth, error) {
 
 // Router groups all auth handlers.
 func (a *Auth) Router(pattern string) (string, http.Handler) {
+	a.userstate.SetMinimumConfirmationCodeLength(32)
 	a.perm.Clear()
 	a.perm.SetPublicPath([]string{"/", pattern + "/login"})
 	a.perm.SetUserPath([]string{pattern + "/session", pattern + "/logout", "/cars"})
 	a.perm.SetDenyFunction(denyHandler)
 	r := chi.NewRouter()
 	r.Use(a.Middleware())
-	r.Get("/session", a.sessionHandler)
 	r.Post("/login", a.loginHandler)
-	r.Delete("/logout", a.logoutHandler)
+	r.With(a.ActiveSession()).Get("/session", a.sessionHandler)
+	r.With(a.ActiveSession()).Delete("/logout", a.logoutHandler)
 	return pattern, r
 }
 
@@ -144,6 +146,32 @@ func (a *Auth) Middleware() func(next http.Handler) http.Handler {
 				return
 			}
 			// Serve the requested page
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// ActiveSession checks active session per user.
+func (a *Auth) ActiveSession() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user := a.userstate.Username(r)
+			sid, ok := cookie.SecureCookie(
+				r,
+				sessionIDKey,
+				a.userstate.CookieSecret(),
+			)
+			if !ok {
+				a.perm.DenyFunction()(w, r)
+				return
+			}
+			if user != "" {
+				if !a.userstate.CorrectPassword(user, sid) {
+					a.perm.DenyFunction()(w, r)
+					a.userstate.ClearCookie(w)
+					return
+				}
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
