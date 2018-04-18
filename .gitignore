@@ -15,3 +15,5 @@
 
 .vscode/
 debug
+
+.DS_Store
