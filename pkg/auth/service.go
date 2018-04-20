@@ -6,7 +6,6 @@ import (
 
 	pb "github.com/danikarik/constantinople/pkg/proto"
 	"github.com/danikarik/constantinople/pkg/util"
-	"github.com/golang/glog"
 	servertiming "github.com/mitchellh/go-server-timing"
 	"github.com/xyproto/cookie"
 )
@@ -82,22 +81,11 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request, data *UserCred) {
 		a.userstate.CookieTimeout(user),
 		"/",
 		a.userstate.CookieSecret(),
-		glog.V(3) == false,
+		false,
 		true,
 	)
 
-	if glog.V(3) {
-		a.userstate.Login(w, user)
-		util.OK(w, r)
-		return
-	}
-
-	a.userstate.SetLoggedIn(user)
-	if err := a.userstate.SetUsernameCookieOnlyHTTPS(w, user); err != nil {
-		util.BadRequest(w, r, err)
-		return
-	}
-
+	a.userstate.Login(w, user)
 	util.OK(w, r)
 }
 

@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 
 	"github.com/danikarik/constantinople/pkg/auth"
@@ -19,7 +20,6 @@ import (
 	"github.com/go-chi/valve"
 	"github.com/golang/glog"
 	servertiming "github.com/mitchellh/go-server-timing"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -82,6 +82,12 @@ func New(addr string, options Options) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	basicAuth := auth.BasicAuth(func(user, pass string) bool {
+		if user == options.Username && pass == options.Password {
+			return true
+		}
+		return false
+	})
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
@@ -93,17 +99,9 @@ func New(addr string, options Options) (*App, error) {
 	r.Use(middleware.Compress(5))
 	r.Use(crs.Handler)
 	r.Use(metric.RequestsResponseTime())
-	r.Route("/live", func(r chi.Router) {
-		r.Use(auth.BasicAuth(func(user, pass string) bool {
-			if user == options.Username && pass == options.Password {
-				return true
-			}
-			return false
-		}))
-		r.Mount("/debug", middleware.Profiler())
-		r.Get("/metrics", promhttp.Handler().ServeHTTP)
-	})
 	r.Mount(ath.Router("/auth"))
+	r.With(basicAuth).Mount("/debug", middleware.Profiler())
+	r.With(basicAuth).Mount("/metrics", promhttp.Handler())
 	// DELETE IN FUTURE
 	r.With(ath.Middleware()).Get("/cars", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

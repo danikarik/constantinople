@@ -6,5 +6,5 @@
 - [x] Single active session
 - [ ] Test auth
 - [ ] Add `Dockerfile`
-- [ ] Add `Makefile`
+- [x] Add `Makefile`
 - [ ] Add guide

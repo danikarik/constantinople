@@ -18,3 +18,4 @@ debug
 
 .DS_Store
 vendor/
+bin/
